@@ -1,0 +1,36 @@
+# Python-generated files
+__pycache__/
+.pytest_cache
+.ruff_cache
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+
+
+# Virtual environments
+.venv
+
+.env
+*.log
+__pycache__
+*.pyc
+*.pyo
+*.swp
+*.swo
+*.swn
+*.tmp
+*.lock
+*.db
+*.sqlite3
+*.sqlite
+*.sqlite3-journal
+*.sqlite-shm
+*.sqlite-wal
+*.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
