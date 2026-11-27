@@ -3,7 +3,7 @@ import os
 import pytest
 
 os.environ["ANTHROPIC_API_KEY"] = "test"
-os.environ["LLM_PROVIDER"] = "anthropic"
+os.environ["LLM_MODEL"] = "anthropic/claude-haiku-4-5"
 os.environ["APP_ENV"] = "development"
 os.environ["LOG_LEVEL"] = "INFO"
 

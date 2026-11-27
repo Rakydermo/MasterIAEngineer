@@ -1,10 +1,23 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class EstimationRequest(BaseModel):
     """Incoming request containing a meeting transcription to estimate."""
 
-    transcription: str = Field(..., min_length=50, description="Meeting transcription text")
+    transcription: str = Field(
+        ...,
+        min_length=50,
+        max_length=50_000,
+        description="Meeting transcription text",
+    )
+
+    @field_validator("transcription")
+    @classmethod
+    def reject_blank_transcription(cls, value: str) -> str:
+        """Reject transcriptions made only of whitespace."""
+        if not value.strip():
+            raise ValueError("transcription must contain non-whitespace characters")
+        return value
 
 
 class TokenUsage(BaseModel):
