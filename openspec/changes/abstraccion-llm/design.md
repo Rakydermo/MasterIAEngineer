@@ -102,11 +102,13 @@ El router HTTP solo mapea clase a código (`504`, `503 + Retry-After`, `502`, `5
 
 La respuesta mantiene `{estimation, model, provider, usage}`. `model` es el modelo físico que devuelve LiteLLM. `provider` se resuelve con una tabla `{modelo_físico: proveedor}` construida al montar el Router desde la propia configuración (ya conocemos el prefijo de cada despliegue), en lugar de leer `_hidden_params` (API privada) o adivinar con `get_llm_provider`.
 
-Si `response.model` no está en la tabla (el proveedor devuelve un alias inesperado), se registra un warning y se usa el proveedor del despliegue primario. Un test con `mock_response` fija el comportamiento.
+La coincidencia no puede ser exacta: los proveedores responden con snapshots fechados (`claude-haiku-4-5-20251001`, `gpt-4o-mini-2024-07-18`), como confirmó la prueba manual del 2026-11-27. Se resuelve primero por igualdad y, si no, por el nombre configurado más largo que sea prefijo del devuelto (`modelo + "-"`), para que `gpt-4o-mini` gane a `gpt-4o`. Si nada coincide, se registra un warning y se usa el proveedor del despliegue primario. Un test con `mock_response` fija el comportamiento.
 
 ### D8. Coste desde la tabla de precios de LiteLLM
 
-`litellm.completion_cost(completion_response=response)` da el coste de la llamada. Se registra junto a tokens y proveedor. Si devuelve `None` (modelo desconocido para la tabla), se registra `cost=None` y la petición no falla: el coste es observabilidad, no contrato.
+`litellm.completion_cost(completion_response=response)` da el coste de la llamada. Se registra junto a tokens y proveedor y se expone en la respuesta como `usage.cost_usd` (en USD, que es la unidad de la tabla de LiteLLM), porque el cliente que recibe la estimación quiere saber lo que ha costado generarla sin leer los logs. Es un coste **estimado** con la tabla de precios local, no una factura.
+
+Si devuelve `None` (modelo desconocido para la tabla), se registra `cost_usd=None` y la respuesta lleva `cost_usd: null`; la petición no falla: el coste es observabilidad y contrato, pero nunca una condición de error.
 
 ### D9. Sin cache
 
@@ -167,12 +169,27 @@ Sigue siendo un middleware ASGI puro (~15 líneas) y no una dependencia de ruta,
 
 Fuera de alcance, y apuntado para el change de observabilidad: aceptar y validar el `X-Request-ID` entrante (`re.fullmatch`, longitud 1-64), añadir `expose_headers=["X-Request-ID"]` a CORS para que un cliente JS pueda leerlo, y trazas distribuidas (`traceparent`). También se acepta y se documenta que un 500 no capturado sale de `ServerErrorMiddleware` —siempre el más externo— sin la cabecera.
 
+### D16. Medición real de arranque y tamaño
+
+Medido el 2026-11-27 en Windows con Python 3.11 y `litellm==1.111.0`:
+
+| Métrica | Valor |
+|---|---|
+| `import app.main` | 13,6–17,0 s (dos ejecuciones) |
+| `import litellm` | 11,5 s |
+| `import openai` | 3,5 s |
+| Tamaño de `.venv` | 305 MB |
+
+LiteLLM aporta ~14 s de los ~17 s totales; el coste no es del código propio. Supera cualquier presupuesto razonable de arranque de un servicio pequeño, así que se deja constancia aquí: es el precio de la abstracción multi-proveedor elegida. La palanca de rollback sigue siendo el wrapper propio de ~100 líneas sobre los SDKs (el diseño de `robustez-llm`), que reduciría el arranque a ~4 s y el entorno a una fracción. No se cambia ahora porque el objetivo del change era precisamente no mantener ese wrapper.
+
+Mitigación operativa mientras se mantenga LiteLLM: arrancar el proceso antes de abrir tráfico (readiness probe) y no usar `--reload` en producción, donde cada recarga paga los ~17 s.
+
 ## Risks / Trade-offs
 
 - [Peor caso de latencia de ~4 min por petición (2 × 120 s)] → Documentarlo y fijar los timeouts de proxy y balanceador por encima; si el SLO exige menos, bajar `LLM_READ_TIMEOUT_S`, que es la única palanca.
 - [Peso de la dependencia: `boto3`, `tokenizers`, `huggingface-hub`] → Medir imagen y arranque en la tarea de verificación; el rollback es el wrapper propio.
 - [Supply chain: LiteLLM es un objetivo de alto valor] → Versión exacta, `uv.lock` con hashes, upgrades revisados y `uv sync` sin `--upgrade` en despliegue.
-- [Resolver `provider` depende de qué devuelve `response.model`] → Tabla propia + test con `mock_response`; el fallback es el proveedor del primario con warning.
+- [Resolver `provider` depende de qué devuelve `response.model`] → Tabla propia con igualdad y prefijo (snapshots fechados) + test con `mock_response`; el fallback es el proveedor del primario con warning.
 - [Cooldowns en memoria: un despliegue en cooldown puede producir "No deployments available"] → Mapear ese error a `LLMUpstreamError`/`LLMRateLimitError` y cubrirlo con test; el mensaje al cliente sigue siendo genérico.
 - [Un 401 en el primario rota al secundario] → Aceptado: es otra credencial y otro proveedor. Solo se considera no recuperable el fallo de configuración repetido en ambos, que acaba en `LLMConfigError`.
 - [Telemetría o logs de LiteLLM filtrando datos] → D12 y revisión de que no se registran prompts.

@@ -99,6 +99,7 @@ def test_router_is_a_lazy_singleton() -> None:
 
 
 def test_router_falls_back_to_the_secondary_deployment(monkeypatch) -> None:
+    monkeypatch.setattr(llm_service, "get_settings", lambda: make_settings())
     deployments = llm_service._build_model_list(make_settings())
     deployments[0]["litellm_params"]["mock_response"] = Exception("primary down")
     deployments[1]["litellm_params"]["mock_response"] = "hello from secondary"
@@ -139,6 +140,9 @@ def test_primary_response_resolves_its_provider(monkeypatch) -> None:
     monkeypatch.setattr(
         llm_service, "_get_router", lambda: FakeRouter(response=make_response())
     )
+    monkeypatch.setattr(
+        llm_service.litellm, "completion_cost", lambda completion_response: 0.00011000000000000001
+    )
 
     result = llm_service.generate_estimation(TRANSCRIPTION)
 
@@ -148,10 +152,25 @@ def test_primary_response_resolves_its_provider(monkeypatch) -> None:
         "input_tokens": 10,
         "output_tokens": 20,
         "total_tokens": 30,
+        "cost_usd": 0.00011,
     }
 
 
+def test_unknown_cost_is_exposed_as_null(monkeypatch) -> None:
+    monkeypatch.setattr(
+        llm_service, "_get_router", lambda: FakeRouter(response=make_response())
+    )
+    monkeypatch.setattr(
+        llm_service.litellm, "completion_cost", lambda completion_response: None
+    )
+
+    result = llm_service.generate_estimation(TRANSCRIPTION)
+
+    assert result["usage"]["cost_usd"] is None
+
+
 def test_secondary_response_resolves_its_provider(monkeypatch) -> None:
+    monkeypatch.setattr(llm_service, "get_settings", lambda: make_settings())
     monkeypatch.setattr(
         llm_service,
         "_get_router",
@@ -161,6 +180,20 @@ def test_secondary_response_resolves_its_provider(monkeypatch) -> None:
     result = llm_service.generate_estimation(TRANSCRIPTION)
 
     assert result["model"] == "gpt-4o-mini"
+    assert result["provider"] == "openai"
+
+
+def test_dated_snapshot_resolves_its_provider(monkeypatch) -> None:
+    monkeypatch.setattr(llm_service, "get_settings", lambda: make_settings())
+    monkeypatch.setattr(
+        llm_service,
+        "_get_router",
+        lambda: FakeRouter(response=make_response(model="gpt-4o-mini-2024-07-18")),
+    )
+
+    result = llm_service.generate_estimation(TRANSCRIPTION)
+
+    assert result["model"] == "gpt-4o-mini-2024-07-18"
     assert result["provider"] == "openai"
 
 
@@ -284,7 +317,10 @@ def test_failure_is_logged_with_full_detail(monkeypatch) -> None:
         (httpx.ReadTimeout("slow"), LLMTimeoutError),
         (litellm.RateLimitError("429", "anthropic", "m"), LLMRateLimitError),
         (litellm.InternalServerError("500", "anthropic", "m"), LLMUpstreamError),
-        (litellm.APIConnectionError(message="down", llm_provider="anthropic", model="m"), LLMUpstreamError),
+        (
+            litellm.APIConnectionError(message="down", llm_provider="anthropic", model="m"),
+            LLMUpstreamError,
+        ),
         (litellm.AuthenticationError("401", "anthropic", "m"), LLMConfigError),
         (ValueError("unexpected"), LLMUpstreamError),
     ],

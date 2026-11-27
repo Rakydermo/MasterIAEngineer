@@ -12,7 +12,10 @@ os.environ["LOG_LEVEL"] = "INFO"
 def clear_settings_cache():
     """Evita que la caché de Settings filtre el entorno entre tests."""
     from app.config import get_settings
+    from app.services.llm_service import reset_llm_state
 
     get_settings.cache_clear()
+    reset_llm_state()
     yield
     get_settings.cache_clear()
+    reset_llm_state()

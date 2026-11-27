@@ -6,7 +6,12 @@ FAKE_RESULT = {
     "estimation": "## Estimación de prueba",
     "model": "test-model",
     "provider": "anthropic",
-    "usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
+    "usage": {
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "cost_usd": 0.00011,
+    },
 }
 
 

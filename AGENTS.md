@@ -34,7 +34,7 @@
 
 ## Estado del código
 
-- Implementado: `/health`, `POST /api/v1/estimate`, wrapper LLM sobre `litellm.Router` con fallback ordenado (`order` 1/2), semáforo fail-fast, taxonomía de errores, `X-Request-ID` y logs con coste.
+- Implementado: `/health`, `POST /api/v1/estimate`, wrapper LLM sobre `litellm.Router` con fallback ordenado (`order` 1/2), semáforo fail-fast, taxonomía de errores, `X-Request-ID`, y coste estimado en `usage.cost_usd` y en el log (nullable si la tabla de precios no conoce el modelo).
 - CAG puro: sin BD, retrieval ni persistencia; no añadas estado entre peticiones. **Tampoco cache de respuestas** (`cache_responses=False`): dos peticiones idénticas deben llamar dos veces al proveedor.
 - El endpoint de estimación es `def` (threadpool) porque `Router.completion` es síncrono. No lo cambies a `async def` sin migrar a `acompletion` y revisar el semáforo.
 

@@ -201,10 +201,29 @@ def _provider_table(settings: Settings) -> dict[str, str]:
 
 
 def _resolve_provider(model: str, settings: Settings) -> str:
-    """Resolve which provider served the response."""
-    provider = _provider_table(settings).get(model)
+    """Resolve which provider served the response.
+
+    Providers answer with dated snapshots (``claude-haiku-4-5-20251001``,
+    ``gpt-4o-mini-2024-07-18``), so an exact match is not enough: fall back to
+    the longest configured model name that prefixes the answered one.
+    """
+    table = _provider_table(settings)
+    provider = table.get(model)
     if provider:
         return provider
+
+    candidates = sorted(
+        (
+            (name, candidate)
+            for name, candidate in table.items()
+            if model.startswith(f"{name}-")
+        ),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+    if candidates:
+        return candidates[0][1]
+
     log.warning("llm_provider_unresolved", model=model)
     return split_model_id(settings.LLM_MODEL)[0]
 
@@ -216,10 +235,11 @@ def _completion_cost(response: Any) -> float | None:
     except Exception as exc:  # pragma: no cover - depends on the pricing table
         log.warning("llm_cost_unavailable", error=str(exc))
         return None
-    return cost if cost is not None else None
+    # 8 decimals keep the API clean; the price table works at per-token scale.
+    return round(cost, 8) if cost is not None else None
 
 
-def _normalize_response(response: Any, settings: Settings) -> tuple[dict[str, Any], float | None]:
+def _normalize_response(response: Any, settings: Settings) -> dict[str, Any]:
     """Turn a LiteLLM response into the service contract."""
     usage = getattr(response, "usage", None)
     input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
@@ -248,9 +268,10 @@ def _normalize_response(response: Any, settings: Settings) -> tuple[dict[str, An
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
+            "cost_usd": cost,
         },
     }
-    return result, cost
+    return result
 
 
 def _log_failure(exc: LLMServiceError, started: float, settings: Settings) -> None:
@@ -295,7 +316,7 @@ def generate_estimation(transcription: str) -> dict:
     finally:
         semaphore.release()
 
-    result, cost = _normalize_response(response, settings)
+    result = _normalize_response(response, settings)
     log.info(
         "estimation_completed",
         outcome="success",
@@ -305,6 +326,6 @@ def generate_estimation(transcription: str) -> dict:
         input_tokens=result["usage"]["input_tokens"],
         output_tokens=result["usage"]["output_tokens"],
         total_tokens=result["usage"]["total_tokens"],
-        cost_usd=cost,
+        cost_usd=result["usage"]["cost_usd"],
     )
     return result

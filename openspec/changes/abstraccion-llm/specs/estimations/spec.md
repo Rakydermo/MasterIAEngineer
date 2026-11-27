@@ -4,12 +4,17 @@
 
 ### Requirement: Estimación desde transcripción
 
-El servicio DEBE (MUST) aceptar `POST /api/v1/estimate` con un cuerpo JSON `{"transcription": "..."}`, donde la transcripción tenga entre 50 y 50.000 caracteres y contenga al menos un carácter no blanco, y DEBE devolver la estimación en markdown junto con el modelo, el proveedor y el uso de tokens.
+El servicio DEBE (MUST) aceptar `POST /api/v1/estimate` con un cuerpo JSON `{"transcription": "..."}`, donde la transcripción tenga entre 50 y 50.000 caracteres y contenga al menos un carácter no blanco, y DEBE devolver la estimación en markdown junto con el modelo, el proveedor, el uso de tokens y el coste estimado en USD.
 
 #### Scenario: Transcripción válida
 
 - **WHEN** se envía una transcripción de entre 50 y 50.000 caracteres con contenido real
-- **THEN** responde 200 con `estimation`, `model`, `provider` y `usage` (tokens de entrada, salida y total)
+- **THEN** responde 200 con `estimation`, `model`, `provider` y `usage` (tokens de entrada, salida, total y `cost_usd`)
+
+#### Scenario: Coste no disponible
+
+- **WHEN** el modelo que responde no está en la tabla de precios de LiteLLM
+- **THEN** responde 200 igualmente y `usage.cost_usd` vale `null`, sin hacer fallar la petición
 
 #### Scenario: Transcripción inválida
 

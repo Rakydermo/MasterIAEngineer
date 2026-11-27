@@ -108,17 +108,22 @@ El servicio DEBE (MUST) limitar el número de llamadas simultáneas al proveedor
 
 ### Requirement: Respuesta normalizada del proveedor
 
-Toda respuesta exitosa DEBE (MUST) exponer la estimación generada, el modelo físico que respondió, el proveedor que respondió y el consumo de tokens de entrada, salida y total, con independencia del proveedor utilizado.
+Toda respuesta exitosa DEBE (MUST) exponer la estimación generada, el modelo físico que respondió, el proveedor que respondió y el consumo de tokens de entrada, salida y total, junto con el coste estimado en USD, con independencia del proveedor utilizado. Si el coste no se puede calcular, DEBE (MUST) exponerlo como nulo sin hacer fallar la petición.
 
 #### Scenario: Respuesta del despliegue primario
 
 - **WHEN** responde el despliegue primario
-- **THEN** la respuesta identifica el modelo y el proveedor del primario
+- **THEN** la respuesta identifica el modelo, el proveedor y el coste del primario
 
 #### Scenario: Respuesta del despliegue secundario
 
 - **WHEN** responde el despliegue secundario tras un fallo del primario
-- **THEN** la respuesta identifica el modelo y el proveedor del secundario, no los del primario
+- **THEN** la respuesta identifica el modelo, el proveedor y el coste del secundario, no los del primario
+
+#### Scenario: Coste desconocido
+
+- **WHEN** el modelo no figura en la tabla de precios
+- **THEN** la respuesta incluye `cost_usd: null` y la petición termina con éxito
 
 ### Requirement: Registro de consumo y coste
 

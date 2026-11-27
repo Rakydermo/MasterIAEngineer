@@ -26,6 +26,10 @@ class TokenUsage(BaseModel):
     input_tokens: int
     output_tokens: int
     total_tokens: int
+    cost_usd: float | None = Field(
+        default=None,
+        description="Estimated cost in USD; null when the pricing table does not know the model",
+    )
 
 
 class EstimationResponse(BaseModel):
